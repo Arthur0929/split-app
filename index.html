@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>輕鬆分帳小幫手（自訂類別與日期）</title>
+    <!-- 引入 Chart.js 圖表庫 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+        h2, h3 { color: #2c3e50; }
+        .section { margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+        input, select, button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 8px;
+            margin-bottom: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        button:hover { background-color: #2980b9; }
+        ul { padding-left: 20px; }
+        .result-box {
+            background: #e8f8f5;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 5px solid #2ecc71;
+            margin-top: 10px;
+        }
+        .month-group {
+            margin-bottom: 15px;
+        }
+        .month-title {
+            background: #34495e;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 15px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .history-card {
+            background: #fdfefe;
+            border: 1px solid #e2e8f0;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+        .history-card h4 { margin: 0 0 6px 0; color: #2c3e50; font-size: 14px; }
+        .chart-container {
+            position: relative;
+            margin-top: 15px;
+            height: 250px;
+            width: 100%;
+        }
+        .row-group {
+            display: flex;
+            gap: 10px;
+        }
+        .row-group input, .row-group button {
+            margin-top: 0;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>💰 輕鬆分帳小幫手</h2>
+
+    <!-- 1. 新增成員 -->
+    <div class="section">
+        <h3>1. 輸入參與成員</h3>
+        <input type="text" id="memberName" placeholder="輸入成員名字（例如：小明）">
+        <button onclick="addMember()">新增成員</button>
+        <p>目前成員：<span id="memberList">無</span></p>
+    </div>
+
+    <!-- 2. 新增消費項目 -->
+    <div class="section">
+        <h3>2. 新增消費項目</h3>
+        <input type="text" id="itemName" placeholder="商品名稱（例如：晚餐、計程車）">
+        <input type="number" id="itemPrice" placeholder="價格">
+        
+        <label>消費類別：</label>
+        <select id="itemCategory"></select>
+
+        <!-- 新增自訂類別的小工具 -->
+        <div style="background: #f8f9f9; padding: 10px; border-radius: 6px; margin-bottom: 12px;">
+            <label style="font-size: 14px; color: #666;">想新增其他類別？</label>
+            <div class="row-group">
+                <input type="text" id="newCategoryName" placeholder="輸入新類別名稱（例如：寵物）">
+                <button type="button" onclick="addNewCategory()" style="background-color: #16a085; width: 120px;">新增類別</button>
+            </div>
+        </div>
+
+        <label>分攤方式：</label>
+        <select id="itemType" onchange="togglePayer()">
+            <option value="all">全體均分</option>
+            <option value="single">指定個人獨自負擔</option>
+        </select>
+
+        <div id="payerDiv" style="display:none;">
+            <label>由誰負擔：</label>
+            <select id="itemPayer"></select>
+        </div>
+
+        <button onclick="addItem()">加入項目</button>
+    </div>
+
+    <!-- 3. 消費清單 -->
+    <div class="section">
+        <h3>3. 帳目明細</h3>
+        <ul id="itemList"></ul>
+    </div>
+
+    <!-- 4. 結算結果、日期與圖表 -->
+    <div class="section">
+        <h3>4. 最終結算與花費分析</h3>
+        
+        <label>選擇結算日期：</label>
+        <input type="date" id="recordDate">
+
+        <button onclick="calculate()" style="background-color: #2ecc71;">開始計算分帳與分析花費</button>
+        <div id="resultOutput" class="result-box" style="display:none;"></div>
+        
+        <!-- 圖表顯示區域 -->
+        <div class="chart-container" id="chartWrapper" style="display:none;">
+            <canvas id="expenseChart"></canvas>
+        </div>
+    </div>
+
+    <!-- 5. 歷史紀錄（按月份歸類） -->
+    <div class="section" style="border-bottom: none;">
+        <h3>5. 歷史結算紀錄（依月份歸類）</h3>
+        <div id="historyList">尚無歷史紀錄</div>
+        <button onclick="clearHistory()" style="background-color: #e74c3c; margin-top: 10px;">清除所有紀錄</button>
+    </div>
+</div>
+
+<script>
+    let members = [];
+    let items = [];
+    
+    // 預設的類別清單，並從 localStorage 讀取使用者曾自訂過的類別
+    let categories = JSON.parse(localStorage.getItem("split_categories")) || [
+        "🍽️ 餐飲美食",
+        "🚗 交通車費",
+        "🏠 住宿房租",
+        "🎉 娛樂活動",
+        "📦 其他雜項"
+    ];
+
+    let historyData = JSON.parse(localStorage.getItem("split_history_v4")) || [];
+    let myChart = null;
+
+    // 初始化網頁時執行的動作
+    initCategoryDropdown();
+    setDefaultDate();
+    updateHistoryUI();
+
+    function setDefaultDate() {
+        // 自動將日期選擇器設為今天
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        document.getElementById("recordDate").value = `${yyyy}-${mm}-${dd}`;
+    }
+
+    function initCategoryDropdown() {
+        const catSelect = document.getElementById("itemCategory");
+        catSelect.innerHTML = "";
+        categories.forEach(cat => {
+            let opt = document.createElement("option");
+            opt.value = cat;
+            opt.innerText = cat;
+            catSelect.appendChild(opt);
+        });
+    }
+
+    function addNewCategory() {
+        const input = document.getElementById("newCategoryName");
+        const val = input.value.trim();
+        if (val) {
+            // 檢查是否已存在
+            if (!categories.includes(val)) {
+                categories.push(val);
+                localStorage.setItem("split_categories", JSON.stringify(categories));
+                initCategoryDropdown();
+                // 自動選中剛新增的類別
+                document.getElementById("itemCategory").value = val;
+                input.value = "";
+                alert(`成功新增類別：${val}`);
+            } else {
+                alert("此類別已經存在囉！");
+            }
+        } else {
+            alert("請輸入有效的類別名稱！");
+        }
+    }
+
+    function addMember() {
+        const nameInput = document.getElementById("memberName");
+        const name = nameInput.value.trim();
+        if (name && !members.includes(name)) {
+            members.push(name);
+            nameInput.value = "";
+            updateMemberList();
+            updatePayerDropdown();
+        } else {
+            alert("請輸入有效且未重複的名字！");
+        }
+    }
+
+    function updateMemberList() {
+        document.getElementById("memberList").innerText = members.length > 0 ? members.join(", ") : "無";
+    }
+
+    function updatePayerDropdown() {
+        const payerSelect = document.getElementById("itemPayer");
+        payerSelect.innerHTML = "";
+        members.forEach(m => {
+            let opt = document.createElement("option");
+            opt.value = m;
+            opt.innerText = m;
+            payerSelect.appendChild(opt);
+        });
+    }
+
+    function togglePayer() {
+        const type = document.getElementById("itemType").value;
+        const payerDiv = document.getElementById("payerDiv");
+        payerDiv.style.display = (type === "single") ? "block" : "none";
+    }
+
+    function addItem() {
+        const name = document.getElementById("itemName").value.trim();
+        const price = parseFloat(document.getElementById("itemPrice").value);
+        const category = document.getElementById("itemCategory").value;
+        const type = document.getElementById("itemType").value;
+        const payer = document.getElementById("itemPayer").value;
+
+        if (!name || isNaN(price) || price <= 0) {
+            alert("請輸入正確的商品名稱與價格！");
+            return;
+        }
+
+        if (type === "all" && members.length === 0) {
+            alert("請先新增參與成員，才能進行全體均分！");
+            return;
+        }
+
+        if (type === "single" && !payer) {
+            alert("請選擇是誰負擔此品項！");
+            return;
+        }
+
+        items.push({ name, price, category, type, payer });
+        document.getElementById("itemName").value = "";
+        document.getElementById("itemPrice").value = "";
+        updateItemList();
+    }
+
+    function updateItemList() {
+        const list = document.getElementById("itemList");
+        list.innerHTML = "";
+        items.forEach((item) => {
+            let li = document.createElement("li");
+            let desc = item.type === "all" ? "【均分】" : `【${item.payer}】`;
+            li.innerText = `[${item.category}] ${item.name} - $${item.price} ${desc}`;
+            list.appendChild(li);
+        });
+    }
+
+    function calculate() {
+        if (members.length === 0 || items.length === 0) {
+            alert("請至少新增成員與一項消費項目才能結算！");
+            return;
+        }
+
+        let totals = {};
+        members.forEach(m => totals[m] = 0);
+
+        // 動態建立類別統計物件（包含自訂類別）
+        let categoryTotals = {};
+        categories.forEach(cat => categoryTotals[cat] = 0);
+
+        let totalTripPrice = 0;
+
+        items.forEach(item => {
+            totalTripPrice += item.price;
+
+            if (item.type === "all") {
+                let share = item.price / members.length;
+                members.forEach(m => totals[m] += share);
+            } else if (item.type === "single") {
+                if (totals[item.payer] !== undefined) {
+                    totals[item.payer] += item.price;
+                }
+            }
+
+            if (categoryTotals[item.category] !== undefined) {
+                categoryTotals[item.category] += item.price;
+            } else {
+                categoryTotals[item.category] = item.price;
+            }
+        });
+
+        // 呈現本次計算結果
+        let outputHtml = "<h4>本次每人應付金額：</h4><ul>";
+        for (let m in totals) {
+            outputHtml += `<li><b>${m}</b>：$${totals[m].toFixed(2)} 元</li>`;
+        }
+        outputHtml += "</ul>";
+
+        const resultDiv = document.getElementById("resultOutput");
+        resultDiv.style.display = "block";
+        resultDiv.innerHTML = outputHtml;
+
+        renderChart(categoryTotals);
+
+        // 取得使用者選擇的日期
+        const dateInput = document.getElementById("recordDate").value; // 格式: YYYY-MM-DD
+        let year, month, day;
+        if (dateInput) {
+            let parts = dateInput.split("-");
+            year = parts[0];
+            month = parts[1];
+            day = parts[2];
+        } else {
+            let now = new Date();
+            year = now.getFullYear();
+            month = String(now.getMonth() + 1).padStart(2, '0');
+            day = String(now.getDate()).padStart(2, '0');
+        }
+
+        const monthKey = `${year}年${month}月`;
+        const timeString = `${year}/${month}/${day}`;
+        
+        const record = {
+            monthKey: monthKey,
+            time: timeString,
+            totalPrice: totalTripPrice,
+            members: [...members],
+            items: [...items],
+            totals: { ...totals },
+            categoryTotals: { ...categoryTotals }
+        };
+
+        historyData.unshift(record);
+        localStorage.setItem("split_history_v4", JSON.stringify(historyData));
+        updateHistoryUI();
+    }
+
+    function renderChart(catTotals) {
+        const chartWrapper = document.getElementById("chartWrapper");
+        chartWrapper.style.display = "block";
+
+        const ctx = document.getElementById('expenseChart').getContext('2d');
+        
+        let labels = [];
+        let data = [];
+        for (let cat in catTotals) {
+            if (catTotals[cat] > 0) {
+                labels.push(cat);
+                data.push(catTotals[cat]);
+            }
+        }
+
+        if (myChart) {
+            myChart.destroy();
+        }
+
+        // 自動產生一組豐富的顏色供圓餅圖使用
+        const colorPalette = [
+            '#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c', 
+            '#e67e22', '#2ecc71', '#34495e', '#d35400', '#7f8c8d'
+        ];
+        let bgColors = labels.map((_, i) => colorPalette[i % colorPalette.length]);
+
+        myChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: bgColors
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    title: { display: true, text: '消費類別佔比分析' }
+                }
+            }
+        });
+    }
+
+    function updateHistoryUI() {
+        const historyDiv = document.getElementById("historyList");
+        if (historyData.length === 0) {
+            historyDiv.innerHTML = "<p>尚無歷史紀錄</p>";
+            return;
+        }
+
+        let groupedByMonth = {};
+        historyData.forEach(rec => {
+            let mKey = rec.monthKey || "其他月份";
+            if (!groupedByMonth[mKey]) {
+                groupedByMonth[mKey] = {
+                    total: 0,
+                    records: []
+                };
+            }
+            groupedByMonth[mKey].records.push(rec);
+            groupedByMonth[mKey].total += rec.totalPrice;
+        });
+
+        let html = "";
+        for (let mKey in groupedByMonth) {
+            let monthData = groupedByMonth[mKey];
+            html += `<div class="month-group">`;
+            html += `<div class="month-title"><span>📅 ${mKey}</span><span>總花費：$${monthData.total.toFixed(2)}</span></div>`;
+            
+            monthData.records.forEach(rec => {
+                html += `<div class="history-card">`;
+                html += `<h4>🕒 結算日期：${rec.time} (小計: $${rec.totalPrice})</h4>`;
+                html += `<p style="margin:4px 0;"><b>參與成員：</b>${rec.members.join(", ")}</p>`;
+                html += `<p style="margin:4px 0;"><b>結算明細：</b></p><ul style="margin:0; padding-left:15px;">`;
+                rec.items.forEach(it => {
+                    let desc = it.type === "all" ? "【均分】" : `【${it.payer}】`;
+                    html += `<li>[${it.category}] ${it.name} ($${it.price}) ${desc}</li>`;
+                });
+                html += `</ul><p style="margin:6px 0 0 0;"><b>各別應付：</b></p>`;
+                for (let m in rec.totals) {
+                    html += `&nbsp;&nbsp;• ${m}: $${rec.totals[m].toFixed(2)}<br>`;
+                }
+                html += `</div>`;
+            });
+            html += `</div>`;
+        }
+
+        historyDiv.innerHTML = html;
+    }
+
+    function clearHistory() {
+        if (confirm("確定要清除所有歷史紀錄嗎？")) {
+            historyData = [];
+            localStorage.removeItem("split_history_v4");
+            updateHistoryUI();
+            if (myChart) {
+                myChart.destroy();
+                document.getElementById("chartWrapper").style.display = "none";
+            }
+        }
+    }
+</script>
+
+</body>
+</html>
